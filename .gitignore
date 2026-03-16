@@ -1,0 +1,33 @@
+# ========================
+# Gradle & Build Output
+# ========================
+.gradle/
+build/
+.kotlin/
+out/
+
+!gradle/wrapper/gradle-wrapper.jar
+
+# ========================
+# IntelliJ
+# ========================
+.idea/
+*.iml
+
+# ========================
+# Logs
+# ========================
+*.log
+
+# ========================
+# Environment variables
+# ========================
+.env
+.env.*
+
+# ========================
+# Uploads - folder only
+# ========================
+uploads/*
+!uploads/.keep
+

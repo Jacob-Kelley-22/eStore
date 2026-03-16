@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: eStore-postgres
+    environment:
+      POSTGRES_DB: eStore
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgressql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready - postgres -d estore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: eStore-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_URL: jdbc:postgresql://postgres:5432/estore
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: your-super-secure-jwt-secret-key-that-is-at-least-32-chars
+      JWT_EXPIRATION: 86400000
+    ports:
+      - "8081:8081"
+
+volumes:
+  postgres_data:

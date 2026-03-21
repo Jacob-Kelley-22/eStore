@@ -16,13 +16,18 @@ class OrderServiceTest {
     private val userRepo: UserRepository = mock()
     private val productRepo: ProductRepository = mock()
     private val cartRepo: CartRepository = mock()
-    private val paymentService = PaymentService()
+    private val paymentRepo: PaymentRepository = mock()
+    private val checkoutRequestRepository: CheckoutRequestRepository = mock()
+    private val paymentService = PaymentService(
+        paymentRepo
+    )
     private val orderService = OrderService(
         orderRepo,
         userRepo,
         productRepo,
         cartRepo,
         paymentService,
+        checkoutRequestRepository
     )
 
     /*@Test

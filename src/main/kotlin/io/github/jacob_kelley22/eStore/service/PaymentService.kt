@@ -2,23 +2,50 @@ package io.github.jacob_kelley22.eStore.service
 
 import io.github.jacob_kelley22.eStore.dto.payment.PaymentRequestDTO
 import io.github.jacob_kelley22.eStore.dto.payment.PaymentResponseDTO
+import io.github.jacob_kelley22.eStore.entity.Order
+import io.github.jacob_kelley22.eStore.entity.Payment
+import io.github.jacob_kelley22.eStore.entity.PaymentStatus
 import io.github.jacob_kelley22.eStore.exception.BadRequestException
+import io.github.jacob_kelley22.eStore.repository.PaymentRepository
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import java.time.LocalDateTime
 import java.time.YearMonth
 import java.util.UUID
 
 @Service
-class PaymentService {
+class PaymentService(
+    private val paymentRepository: PaymentRepository
+) {
 
     private val logger = LoggerFactory.getLogger(PaymentService::class.java)
 
-    fun processPayment(request: PaymentRequestDTO): PaymentResponseDTO {
+    fun processPayment(order: Order, request: PaymentRequestDTO): PaymentResponseDTO {
         logger.info("Processing simulated payment for card holder {}", request.cardHolderName)
 
+        val cleanedCardNumber = request.cardNumber
+            .replace(" ", "")
+            .replace("-", "")
+
+        val payment = Payment(
+            order = order,
+            status = PaymentStatus.PENDING,
+            transactionId = UUID.randomUUID().toString(),
+            cardHolderName = request.cardHolderName,
+            last4 = cleanedCardNumber.takeLast(4),
+            amount = order.totalPrice
+        )
+
         // Validate the card number
-        if(!isValidLuhn(request.cardNumber)) {
+        if (!isValidLuhn(request.cardNumber)) {
+            payment.status = PaymentStatus.FAILED
+            payment.failureReason = "Invalid card number"
+            payment.processedAt = LocalDateTime.now()
+
+            paymentRepository.save(payment)
+
             logger.warn("Payment declined: Invalid card number for card holder {}", request.cardHolderName)
+
             throw BadRequestException("Invalid card number")
         }
 
@@ -26,35 +53,52 @@ class PaymentService {
         val expirationDate = YearMonth.of(request.expirationYear, request.expirationMonth)
 
         if (expirationDate.isBefore(now)) {
+            payment.status = PaymentStatus.FAILED
+            payment.failureReason = "Card is expired"
+            payment.processedAt = LocalDateTime.now()
+
+            paymentRepository.save(payment)
+
             logger.warn("Payment declined: expired card for {}", request.cardHolderName)
+
             throw BadRequestException("Card is expired")
         }
+        payment.status = PaymentStatus.SUCCEEDED
+        payment.processedAt = LocalDateTime.now()
 
-        val transactionId = UUID.randomUUID().toString()
+        val savedPayment = paymentRepository.save(payment)
 
-        /* DO PAYMENT PROCESSING HERE
-        * As this is a learning project, an actual payment processing API will not be used
-        * */
+        logger.info(
+            "Payment approved for order {} with transaction id {}",
+            order.id,
+            savedPayment.transactionId
+        )
 
-        logger.info("Payment approved for {} with transaction id {}",
-            request.cardHolderName, transactionId)
 
         return PaymentResponseDTO(
-            approved = true,
-            message = "Payment approved",
-            transactionId = transactionId
+            paymentId = savedPayment.id!!,
+            publicId = savedPayment.publicId,
+            orderId = order.id,
+            status = savedPayment.status,
+            transactionId = savedPayment.transactionId,
+            amount = savedPayment.amount.toPlainString(),
+            message = "Payment approved"
         )
     }
 
     fun isValidLuhn(cardNumber: String): Boolean {
 
         // Assuming input isn't cleaned to only be digits. Can add filtering instead
-        val cleaned = cardNumber.replace(" ", "")
-       // Also assuming the need to adhere to ISO standard, which is min 13-digits
-        if(cleaned.length <= 12 || cleaned.any { !it.isDigit() } || cleaned.all { it == '0'}) {
+        val cleaned = cardNumber
+            .replace(" ", "")
+            .replace("-", "")
+
+        // Also assuming the need to adhere to ISO standard, which is min 13-digits
+        if (cleaned.length !in 13..19 || cleaned.any { !it.isDigit() } || cleaned.all { it == '0' }) {
             // Logger line for testing
-            logger.warn("Invalid card number. Length: {}, Non-Digit Characters: {}, " +
-                    "Non-zero Characters: {}",
+            logger.warn(
+                "Invalid card number. Length: {}, Non-Digit Characters: {}, " +
+                    "Zero Characters: {}",
                 cleaned.length, cleaned.any { !it.isDigit() }, cleaned.all { it == '0' })
             return false
         }

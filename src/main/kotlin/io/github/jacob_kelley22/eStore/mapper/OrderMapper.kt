@@ -12,6 +12,7 @@ fun Order.toDTO() : OrderResponseDTO {
         userId = this.user.id,
         items = this.items.map { it.toDTO() },
         totalPrice = this.totalPrice,
+        status = this.status,
         createdAt = this.createdAt
     )
 }

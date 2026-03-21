@@ -7,7 +7,12 @@ import io.github.jacob_kelley22.eStore.dto.payment.PaymentRequestDTO
 // Entity
 import io.github.jacob_kelley22.eStore.entity.Order
 import io.github.jacob_kelley22.eStore.entity.OrderItem
+import io.github.jacob_kelley22.eStore.entity.OrderStatus
 import io.github.jacob_kelley22.eStore.entity.User
+import io.github.jacob_kelley22.eStore.entity.CheckoutRequest
+import io.github.jacob_kelley22.eStore.entity.CheckoutRequestStatus
+
+// Exception
 import io.github.jacob_kelley22.eStore.exception.BadRequestException
 import io.github.jacob_kelley22.eStore.exception.ForbiddenException
 import io.github.jacob_kelley22.eStore.exception.ResourceNotFoundException
@@ -20,6 +25,7 @@ import io.github.jacob_kelley22.eStore.repository.CartRepository
 
 // Function
 import io.github.jacob_kelley22.eStore.mapper.toDTO
+import io.github.jacob_kelley22.eStore.repository.CheckoutRequestRepository
 
 // Annotation
 import jakarta.transaction.Transactional
@@ -35,7 +41,8 @@ class OrderService(
     private val userRepository: UserRepository,
     private val productRepository: ProductRepository,
     private val cartRepository: CartRepository,
-    private val paymentService: PaymentService
+    private val paymentService: PaymentService,
+    private val checkoutRequestRepository: CheckoutRequestRepository
 ) {
 
     private val logger = LoggerFactory.getLogger(OrderService::class.java)
@@ -63,7 +70,38 @@ class OrderService(
         paymentRequest: PaymentRequestDTO
     ): OrderResponseDTO {
 
+        // Validate cart
         val userId = user.id
+
+        // Check for existing request
+        val existingRequest = checkoutRequestRepository.findByUserIdAndIdempotencyKey(
+            userId, paymentRequest.idempotencyKey
+        )
+
+        // If request exists
+        if (existingRequest.isPresent) {
+            val checkoutRequest = existingRequest.get() // Get it
+
+            // See if the order was completed, return it if it was
+            if (checkoutRequest.status == CheckoutRequestStatus.COMPLETED && checkoutRequest.order != null) {
+                logger.info(
+                    "Returning existing completed checkout for user {} and idempotency key {}",
+                    user.email,
+                    paymentRequest.idempotencyKey
+                )
+                return checkoutRequest.order!!.toDTO()
+            }
+
+            if (checkoutRequest.status == CheckoutRequestStatus.PENDING) {
+                logger.warn(
+                    "Duplicate pending checkout blocked for user {} and idempotency key {}",
+                    user.email,
+                    paymentRequest.idempotencyKey
+                    )
+                throw BadRequestException("Checkout is already being processed for this idempotency key")
+            }
+
+        }
 
         // Start by getting cart from db. User is already found
         logger.info("Checking out user {}", user.email)
@@ -80,16 +118,17 @@ class OrderService(
             throw BadRequestException("Cannot check out with an empty cart")
         }
 
+        // Validate stock
         // Check to make sure enough stock is present to fulfill the order
         cart.items.forEach { cartItem ->
             val product = cartItem.product
             if (cartItem.quantity > product.stockQuantity) {
                 logger.warn(
                     "Insufficient stock for product {}: requested {}, available {}",
-                    cartItem.product, cartItem.quantity, product.stockQuantity
+                    product.name, cartItem.quantity, product.stockQuantity
                 )
                 throw BadRequestException(
-                    "Insufficient stock for product ${cartItem.product.name}: " +
+                    "Insufficient stock for product ${product.name}: " +
                             "requested ${cartItem.quantity}, available ${product.stockQuantity}"
                 )
             }
@@ -97,18 +136,20 @@ class OrderService(
 
         // Now that we know we can complete the order, start preparing it
 
-        // Process the payment
-        val paymentResponse = paymentService.processPayment(paymentRequest)
-
-        if (!paymentResponse.approved) {
-            logger.warn("Payment for user {} not approved for payment", userId)
-            throw BadRequestException("Payment was declined")
-        }
+        // Build a CheckoutRequest first to prevent two orders being made
+        val checkoutRequest = checkoutRequestRepository.save(
+            CheckoutRequest(
+                user = user,
+                idempotencyKey = paymentRequest.idempotencyKey,
+                status = CheckoutRequestStatus.PENDING
+            )
+        )
 
         // Dummy order used to build final order later
         val order = Order(
             user = user,
             items = mutableListOf(),
+            status = OrderStatus.PENDING_PAYMENT,
             totalPrice = BigDecimal.ZERO
         )
 
@@ -133,15 +174,13 @@ class OrderService(
             val lineTotal = product.price.multiply(BigDecimal(cartItem.quantity))
             totalPrice = totalPrice.add(lineTotal)
 
-            // Decrease stock quantity for items in cart
-            product.stockQuantity -= cartItem.quantity
-            productRepository.save(product)
         }
 
         val finalOrder = Order(
             id = order.id,
             user = order.user,
             items = order.items,
+            status = order.status,
             totalPrice = totalPrice
         )
 
@@ -149,14 +188,33 @@ class OrderService(
         finalOrder.items.forEach { it.order = finalOrder }
 
         // Save the order to the db
-        val savedOrder = orderRepository.save(finalOrder).toDTO()
-        logger.info("User {} has completed checkout. Order {} has been placed.", user.email, finalOrder.id)
+        val savedOrder = orderRepository.save(finalOrder)
+        logger.info("Order {} has been placed. Processing payment.", savedOrder.id)
 
-        // Clear cart after the order is saved!
+        // Process the payment
+        // TO-DO: Change payment status to failed if it fails when transaction rollback is fixed
+        paymentService.processPayment(savedOrder, paymentRequest)
+
+        savedOrder.status = OrderStatus.PAID // JPA will detect change
+
+        checkoutRequest.status = CheckoutRequestStatus.COMPLETED
+        checkoutRequest.order = savedOrder
+        checkoutRequest.completedAt = java.time.LocalDateTime.now()
+
+        // Decrement stock of purchased items
+        cart.items.forEach { cartItem ->
+            val product = cartItem.product
+            product.stockQuantity -= cartItem.quantity
+            productRepository.save(product)
+        }
+
+        // Clear cart after the order is saved, payment is processed, and stock is adjusted
         cart.items.clear()
         cartRepository.save(cart)
 
-        return savedOrder
+        logger.info("Checkout completed for user {}. Order {} has been placed successfully", user.email, savedOrder.id)
+
+        return savedOrder.toDTO()
     }
 
     @Transactional

@@ -1,7 +1,7 @@
 package io.github.jacob_kelley22.eStore.entity
 
-enum class PaymentStatus {
+enum class CheckoutRequestStatus {
     PENDING,
-    SUCCEEDED,
+    COMPLETED,
     FAILED
 }

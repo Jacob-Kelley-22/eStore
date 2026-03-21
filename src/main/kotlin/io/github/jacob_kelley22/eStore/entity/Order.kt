@@ -2,7 +2,6 @@ package io.github.jacob_kelley22.eStore.entity
 
 import jakarta.persistence.*
 import jakarta.validation.constraints.Min
-import jakarta.validation.constraints.NotNull
 import java.math.BigDecimal
 import java.time.LocalDateTime
 import kotlin.collections.MutableList
@@ -24,13 +23,10 @@ data class Order(
     @field:Min(0)
     val totalPrice: BigDecimal = BigDecimal.ZERO,
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    var status: OrderStatus = OrderStatus.PENDING_PAYMENT,
+
     @Column(insertable = false, updatable = false)
     val createdAt: LocalDateTime? = null
-) {
-
-    fun calculateTotalPrice(): BigDecimal {
-        return items.fold(BigDecimal.ZERO) { acc, item ->
-            acc + item.priceAtPurchase.multiply(BigDecimal(item.quantity))
-        }
-    }
-}
+)

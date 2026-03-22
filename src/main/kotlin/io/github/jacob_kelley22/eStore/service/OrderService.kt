@@ -174,7 +174,7 @@ class OrderService(
                 throw BadRequestException("Checkout is already being processed for this idempotency key")
             }
 
-            throw BadRequestException("Checkout is already being processed for this idempotency key")
+            throw BadRequestException("Checkout request already exists for this idempotency key")
         }
 
         // Dummy order used to build final order later

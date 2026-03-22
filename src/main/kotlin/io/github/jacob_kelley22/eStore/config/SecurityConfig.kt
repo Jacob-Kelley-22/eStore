@@ -22,7 +22,10 @@ class SecurityConfig {
     }
 
     @Bean
-    fun filterChain(http: HttpSecurity, jwtAuthenticationFilter: JwtAuthenticationFilter): SecurityFilterChain {
+    fun filterChain(
+        http: HttpSecurity,
+        jwtAuthenticationFilter: JwtAuthenticationFilter, correlationIdFilter: CorrelationIdFilter
+    ): SecurityFilterChain {
         http
             .csrf { it.disable() }
             .authorizeHttpRequests { auth ->
@@ -35,11 +38,11 @@ class SecurityConfig {
                         ).permitAll()
                     .anyRequest().authenticated()
             }
+            .addFilterBefore(correlationIdFilter, UsernamePasswordAuthenticationFilter::class.java)
             .addFilterBefore(
                 jwtAuthenticationFilter,
                 UsernamePasswordAuthenticationFilter::class.java
             )
-
 
         return http.build()
     }

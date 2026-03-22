@@ -32,3 +32,8 @@ springdoc:
 jwt:
   secret: ${JWT_SECRET:dev-secret-key-dev-secret-key-1234}
   expiration: ${JWT_EXPIRATION:86400000}
+
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{correlationId}] %logger{36} - %msg%n"

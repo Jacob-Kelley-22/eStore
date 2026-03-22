@@ -16,6 +16,7 @@ import io.github.jacob_kelley22.eStore.entity.CheckoutRequestStatus
 import io.github.jacob_kelley22.eStore.exception.BadRequestException
 import io.github.jacob_kelley22.eStore.exception.ForbiddenException
 import io.github.jacob_kelley22.eStore.exception.ResourceNotFoundException
+import org.springframework.dao.DataIntegrityViolationException
 
 // Repo
 import io.github.jacob_kelley22.eStore.repository.OrderRepository
@@ -137,13 +138,44 @@ class OrderService(
         // Now that we know we can complete the order, start preparing it
 
         // Build a CheckoutRequest first to prevent two orders being made
-        val checkoutRequest = checkoutRequestRepository.save(
-            CheckoutRequest(
-                user = user,
-                idempotencyKey = paymentRequest.idempotencyKey,
-                status = CheckoutRequestStatus.PENDING
+        val checkoutRequest = try {
+            checkoutRequestRepository.save(
+                CheckoutRequest(
+                    user = user,
+                    idempotencyKey = paymentRequest.idempotencyKey,
+                    status = CheckoutRequestStatus.PENDING
+                )
             )
-        )
+        } catch (ex: DataIntegrityViolationException) { // Catch concurrent requests race condition
+           logger.warn(
+               "Duplicate checkout request detected for user {} and idempotency key {}",
+               user.email,
+               paymentRequest.idempotencyKey
+           )
+
+            // Grab the record for the existing checkout request
+            val existing = checkoutRequestRepository
+                .findByUserIdAndIdempotencyKey(user.id, paymentRequest.idempotencyKey)
+                .orElseThrow {
+                    IllegalStateException("CheckoutRequest exists but could not be retrieved")
+                }
+
+            // See if it's complete. If so, return it
+            if (existing.status == CheckoutRequestStatus.COMPLETED && existing.order != null) {
+                logger.info(
+                    "Returning existing completed checkout after duplicate insert for user {}",
+                    user.email
+                )
+                return existing.order!!.toDTO()
+            }
+
+            // Throw an exception to say the checkout is being processed
+            if (existing.status == CheckoutRequestStatus.PENDING) {
+                throw BadRequestException("Checkout is already being processed for this idempotency key")
+            }
+
+            throw BadRequestException("Checkout is already being processed for this idempotency key")
+        }
 
         // Dummy order used to build final order later
         val order = Order(

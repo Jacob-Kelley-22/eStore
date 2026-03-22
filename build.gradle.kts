@@ -44,6 +44,7 @@ dependencies {
 	testImplementation("org.springframework.security:spring-security-test")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
 	testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
+	testImplementation("com.h2database:h2")
 
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
@@ -65,5 +66,5 @@ tasks.withType<Test> {
 }
 
 tasks.bootRun {
-	mainClass.set("io.github.jacob_kelley22.EShopApplicationKt")
+	mainClass.set("io.github.jacob_kelley22.eStore.EStoreKt")
 }

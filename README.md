@@ -3,10 +3,10 @@
 This is an eCommerce backend built with Kotlin and Spring Boot.
 
 ## Key Features
-- JWT Authentication and Authorization using Spring Security
+- JWT Authentication and authorization using Spring Security
 - A Product, Cart, and Order management system
-- Simulated payment processing with persistence
-- Idempotent checkout
+- Simulated payment processing with persistent transation records
+- Idempotent checkout (prevents duplicate orders on retries)
 - Order lifecycle management (`Pending payment -> Fulfilled`)
 - Payment lifecycle tracking (`Pending -> Succeeded/Failed`)
 - Dockerization with PostgreSQL
@@ -54,9 +54,9 @@ Once the containers are running:
 - **Health Check:** http://localhost:8081/actuator/health
 
 ### Option 2 - Local Development
-Ensure PostgreSQL is running, then execute:
+Ensure PostgreSQL is running, run:
 ```bash
-./gradlew bootrun
+./gradlew bootRun
 ```
 
 ## Example Flow

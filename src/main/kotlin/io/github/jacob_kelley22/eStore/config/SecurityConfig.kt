@@ -1,8 +1,10 @@
 package io.github.jacob_kelley22.eStore.config
 
 import io.github.jacob_kelley22.eStore.security.JwtAuthenticationFilter
+import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.annotation.Order
 import org.springframework.security.authentication.AuthenticationManager
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
@@ -14,7 +16,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableMethodSecurity
-class SecurityConfig {
+class SecurityConfig (
+    private val correlationIdFilter: CorrelationIdFilter,
+){
 
     @Bean
     fun passwordEncoder(): PasswordEncoder {
@@ -34,7 +38,9 @@ class SecurityConfig {
                         "/api/auth/**",
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
-                        "/swagger-ui.html"
+                        "/swagger-ui.html",
+                        "/actuator/health",
+                        "/actuator/info"
                         ).permitAll()
                     .anyRequest().authenticated()
             }
@@ -52,5 +58,18 @@ class SecurityConfig {
         authConfig: AuthenticationConfiguration
     ): AuthenticationManager {
         return authConfig.authenticationManager
+    }
+
+    @Bean
+    @Order(1)
+    fun actuatorHealthFilterChain(http: HttpSecurity): SecurityFilterChain {
+        http
+            .securityMatcher(EndpointRequest.to("health"))
+            .csrf { it.disable() }
+            .authorizeHttpRequests { auth ->
+                auth.anyRequest().permitAll()
+            }
+
+        return http.build()
     }
 }

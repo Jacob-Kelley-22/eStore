@@ -2,11 +2,14 @@ package io.github.jacob_kelley22.eStore
 
 import io.github.jacob_kelley22.eStore.dto.product.CreateProductRequestDTO
 import io.github.jacob_kelley22.eStore.entity.Product
+import io.github.jacob_kelley22.eStore.mapper.toDTO
 import io.github.jacob_kelley22.eStore.repository.ProductRepository
 import io.github.jacob_kelley22.eStore.service.ProductService
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.*
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.jpa.domain.Specification
 import java.math.BigDecimal
 import java.util.Optional
 
@@ -26,12 +29,32 @@ class ProductServiceTest {
             stockQuantity = 5
         )
 
-        whenever(productRepository.findAll()).thenReturn(listOf(product))
+        // Stubs for call with spec and without spec. With spec isn't needed
+        whenever(
+            productRepository.findAll(
+                anyOrNull<Specification<Product>>(),
+                any<org.springframework.data.domain.Pageable>()
+            )
+        ).thenReturn(PageImpl<Product>(listOf(product)))
 
-        val result = productService.getAllProducts()
+        whenever(
+            productRepository.findAll(
+                any<org.springframework.data.domain.Pageable>()
+            )
+        ).thenReturn(PageImpl(listOf(product)))
 
-        assertEquals(1, result.size)
-        assertEquals("Laptop", result[0].name)
+        val result = productService.getAllProducts(
+            page = 0,
+            size = 10,
+            sortBy = "id",
+            sortDirection = "asc",
+            name = null,
+            minPrice = null,
+            maxPrice = null
+        )
+
+        assertEquals(1, result.content.size)
+        assertEquals("Laptop", result.content[0].name)
     }
 
     @Test

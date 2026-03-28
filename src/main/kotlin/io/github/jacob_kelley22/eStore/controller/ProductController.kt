@@ -2,13 +2,14 @@ package io.github.jacob_kelley22.eStore.controller
 
 import io.github.jacob_kelley22.eStore.dto.product.CreateProductRequestDTO
 import io.github.jacob_kelley22.eStore.dto.product.ProductResponseDTO
-import io.github.jacob_kelley22.eStore.entity.Product
 import io.github.jacob_kelley22.eStore.service.ProductService
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.multipart.MultipartFile
+import org.springframework.data.domain.Page
+import java.math.BigDecimal
 
 @Tag(name = "Product", description = "Product management endpoints")
 @RestController
@@ -22,8 +23,24 @@ class ProductController (private val productService: ProductService) {
     }
 
     @GetMapping
-    fun getAllProducts() : List<ProductResponseDTO> {
-        return productService.getAllProducts()
+    fun getAllProducts(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "10") size: Int,
+        @RequestParam(defaultValue = "id") sortBy: String,
+        @RequestParam(defaultValue = "asc") sortDirection: String,
+        @RequestParam(required = false) name: String?,
+        @RequestParam(required = false) minPrice: BigDecimal?,
+        @RequestParam(required = false) maxPrice: BigDecimal?
+    ) : Page<ProductResponseDTO> {
+        return productService.getAllProducts(
+            page = page,
+            size = size,
+            sortBy = sortBy,
+            sortDirection = sortDirection,
+            name = name,
+            minPrice = minPrice,
+            maxPrice = maxPrice
+        )
     }
 
     @GetMapping("/{id}")

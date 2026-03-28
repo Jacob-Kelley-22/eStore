@@ -23,7 +23,8 @@ class JwtAuthenticationFilter(
         return path.startsWith("/api/auth") ||
                 path.startsWith("/v3/api-docs") ||
                 path.startsWith("/swagger-ui") ||
-                path == "/swagger-ui.html"
+                path == "/swagger-ui.html" ||
+                path == "/actuator/health"
     }
 
     override fun doFilterInternal(

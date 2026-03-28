@@ -1,13 +1,10 @@
 # Build stage
-FROM gradle:8.7-jdk21 AS builder
+FROM eclipse-temurin:21-jdk AS builder
 WORKDIR /app
 
-COPY build.gradle.kts settings.gradle.jts ./
-COPY gradle ./gradle
-RUN gradle dependencies --no-daemon || true
-
 COPY . .
-RUN gradle bootJar --no-daemon
+RUN chmod +x ./gradlew
+RUN ./gradlew bootJar --no-daemon
 
 # Run stage
 FROM eclipse-temurin:21-jre

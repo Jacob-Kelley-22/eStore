@@ -1,19 +1,17 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16
     container_name: eStore-postgres
     environment:
-      POSTGRES_DB: eStore
+      POSTGRES_DB: estore
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
       - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgressql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready - postgres -d estore"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d estore"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -33,6 +31,11 @@ services:
       JWT_EXPIRATION: 86400000
     ports:
       - "8081:8081"
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health | grep UP" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:

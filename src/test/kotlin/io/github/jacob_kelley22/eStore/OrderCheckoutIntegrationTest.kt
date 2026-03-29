@@ -30,9 +30,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @SpringBootTest
-@ActiveProfiles("test")
 @Transactional
-class OrderCheckoutIntegrationTest {
+class OrderCheckoutIntegrationTest : AbstractPostgresIntegrationTest() {
 
     @Autowired
     lateinit var orderRepository: OrderRepository

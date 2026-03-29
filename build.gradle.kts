@@ -53,6 +53,11 @@ dependencies {
 	testImplementation("com.h2database:h2")
 
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+	// Testcontainers
+	testImplementation(platform("org.testcontainers:testcontainers-bom:1.21.3"))
+	testImplementation("org.testcontainers:junit-jupiter")
+	testImplementation("org.testcontainers:postgresql")
 }
 
 kotlin {

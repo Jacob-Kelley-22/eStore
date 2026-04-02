@@ -35,6 +35,9 @@ import java.math.BigDecimal
 
 // Logging
 import org.slf4j.LoggerFactory
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 
 @Service
 class OrderService(
@@ -264,14 +267,28 @@ class OrderService(
     }
 
     // Get all of a user's orders
-    fun getOrdersByUserEmail(email: String): List<OrderResponseDTO> {
+    fun getOrdersByUserEmail(
+        email: String,
+        page: Int,
+        size: Int,
+        sortBy: String,
+        sortDirection: String
+    ): Page<OrderResponseDTO> {
         val user = userRepository.findByEmail(email)
             .orElseThrow {
                 logger.warn("User with email $email not found while fetching their orders.")
                 ResourceNotFoundException("User with email $email not found")
             }
 
-        return orderRepository.findByUserId(user.id).map { it.toDTO() }
+        val sort = if (sortDirection.equals("desc", ignoreCase = true)) {
+            Sort.by(sortBy).descending()
+        } else {
+            Sort.by(sortDirection).ascending()
+        }
+
+        val pageable = PageRequest.of(page, size, sort)
+
+        return orderRepository.findByUserId(user.id, pageable).map { it.toDTO() }
     }
 
     // Get a specific order for a user, only letting them see their order

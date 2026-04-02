@@ -4,6 +4,7 @@ import io.github.jacob_kelley22.eStore.dto.order.OrderResponseDTO
 import io.github.jacob_kelley22.eStore.service.AuthenticationFacade
 import io.github.jacob_kelley22.eStore.service.OrderService
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.data.domain.Page
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
@@ -16,9 +17,21 @@ class OrderController(
 ) {
 
     @GetMapping
-    fun getUserOrders(): ResponseEntity<List<OrderResponseDTO>> {
+    fun getUserOrders(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "10") size: Int,
+        @RequestParam(defaultValue = "createdAt") sortBy: String,
+        @RequestParam(defaultValue = "desc") sortDirection: String
+    ): ResponseEntity<Page<OrderResponseDTO>> {
         val email = authenticationFacade.getCurrentUserEmail()
-        return ResponseEntity.ok(orderService.getOrdersByUserEmail(email))
+        return ResponseEntity.ok(orderService.getOrdersByUserEmail(
+            email = email,
+            page = page,
+            size = size,
+            sortBy = sortBy,
+            sortDirection = sortDirection
+            )
+        )
     }
 
     @GetMapping("/{orderId}")

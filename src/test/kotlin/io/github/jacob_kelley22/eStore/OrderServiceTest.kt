@@ -1,13 +1,17 @@
 package io.github.jacob_kelley22.eStore
 
 import io.github.jacob_kelley22.eStore.entity.*
+import io.github.jacob_kelley22.eStore.exception.ForbiddenException
+import io.github.jacob_kelley22.eStore.exception.ResourceNotFoundException
 import io.github.jacob_kelley22.eStore.repository.*
 import io.github.jacob_kelley22.eStore.service.OrderService
 import io.github.jacob_kelley22.eStore.service.PaymentService
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import java.util.*
 import org.mockito.kotlin.*
+import org.springframework.data.domain.PageImpl
 import java.math.BigDecimal
 
 
@@ -30,82 +34,141 @@ class OrderServiceTest {
         checkoutRequestRepository
     )
 
-    /*@Test
-    fun `createOrder returns correct OrderResponseDTO`(){
-
-        //Arrange
-        val user = User(
-            id = 1,
-            password = "test",
-            email = "test@test.com"
-        )
-
-        val product1 = Product(
-            id = 1,
-            name = "Laptop",
-            description = "Gaming Laptop",
-            price = BigDecimal(1000),
-            quantity = 5
-        )
-
-        val product2 = Product(
-            id = 2,
-            name = "Mouse",
-            description = "Gaming Mouse",
-            price = BigDecimal(50),
-            quantity = 5
-        )
-
-        val request = CreateOrderRequestDTO(
-            userId = 1,
-            items = listOf(
-                CreateOrderItemRequestDTO(productId = product1.id, quantity = 1),
-                CreateOrderItemRequestDTO(productId = product2.id, quantity = 2)
-            )
-        )
-
-        whenever(userRepo.findById(1)).thenReturn(Optional.of(user))
-        whenever(productRepo.findById(1)).thenReturn(Optional.of(product1))
-        whenever(productRepo.findById(2)).thenReturn(Optional.of(product2))
-
-        whenever(orderRepo.save(any())).thenAnswer { it.arguments[0] }
-
-        // Act
-        val response = orderService.createOrder(request)
-
-        // Assert
-        assertEquals(1, response.userId)
-        assertEquals(BigDecimal(1100), response.totalPrice)
-        assertEquals(2, response.items.size)
-        assertEquals(1, response.items[0].productId)
-        assertEquals(2, response.items[1].productId)
-
-        verify(orderRepo, times(1)).save(any())
-    }
-
     @Test
-    fun `createOrder throws exception when product not found`() {
-
+    fun `get orders by user email returns paginated order responses` () {
         val user = User(
             id = 1,
             email = "test@test.com",
-            password = "test"
-            )
-
-        val request = CreateOrderRequestDTO(
-            userId = 1,
-            items = listOf(CreateOrderItemRequestDTO(productId = 1, quantity = 1))
+            password = "encoded-password"
         )
 
-        whenever(userRepo.findById(1)).thenReturn(Optional.of(user))
-        whenever(productRepo.findById(1)).thenReturn(Optional.empty())
+        val product = Product(
+            id = 10,
+            name = "Laptop",
+            description = "Gaming Laptop",
+            price = BigDecimal("1200.00"),
+            stockQuantity = 5
+        )
 
-        val exception = assertThrows<RuntimeException> {
-            orderService.createOrder(request)
+        val order = Order(
+            id  = 100,
+            user = user,
+            items = mutableListOf(),
+            totalPrice = BigDecimal("1200.00"),
+            status = OrderStatus.PAID
+        )
+
+        val orderItem = OrderItem(
+            id = 1000,
+            order = order,
+            product = product,
+            quantity = 1,
+            priceAtPurchase = BigDecimal("1200.00")
+        )
+
+        order.items.add(orderItem)
+
+        whenever(userRepo.findByEmail("test@test.com")).thenReturn(Optional.of(user))
+
+        whenever(orderRepo.findByUserId(eq(1L), any())).thenReturn(PageImpl(listOf(order)))
+
+        val result = orderService.getOrdersByUserEmail(
+            email = "test@test.com",
+            page = 0,
+            size = 10,
+            sortBy = "createdAt",
+            sortDirection = "desc"
+        )
+
+        assertEquals(1, result.content.size)
+        assertEquals(100L, result.content[0].id)
+        assertEquals(1L, result.content[0].userId)
+        assertEquals(BigDecimal("1200.00"), result.content[0].totalPrice)
+
+        verify(userRepo).findByEmail("test@test.com")
+        verify(orderRepo).findByUserId(
+            eq(1L),
+            any()
+        )
+    }
+    @Test
+    fun `get orders by user email throws when user not found`() {
+        whenever(userRepo.findByEmail("missing@test.com")).thenReturn(Optional.empty())
+
+        val exception = assertThrows<ResourceNotFoundException> {
+            orderService.getOrdersByUserEmail(
+                email = "missing@test.com",
+                page = 0,
+                size = 10,
+                sortBy = "createdAt",
+                sortDirection = "desc"
+            )
         }
 
-        assertEquals("Product 1 not found", exception.message)
-    }*/
+        assertEquals("User with email missing@test.com not found", exception.message)
+    }
+
+    @Test
+    fun `get order by id for user returns correct order`() {
+        val user = User(
+            id = 1,
+            email = "test@test.com",
+            password = "encoded-password"
+        )
+
+        val product = Product(
+            id = 10,
+            name = "Laptop",
+            description = "Gaming Laptop",
+            price = BigDecimal("1200.00"),
+            stockQuantity = 5
+        )
+
+        val order = Order(
+            id = 100,
+            user = user,
+            items = mutableListOf(),
+            totalPrice = BigDecimal("1200.00"),
+            status = OrderStatus.PAID
+        )
+
+        val orderItem = OrderItem(
+            id = 1000,
+            order = order,
+            product = product,
+            quantity = 1,
+            priceAtPurchase = BigDecimal("1200.00")
+        )
+
+        order.items.add(orderItem)
+
+        whenever(userRepo.findByEmail("test@test.com")).thenReturn(Optional.of(user))
+        whenever(orderRepo.findByIdAndUserId(100L, 1L)).thenReturn(Optional.of(order))
+
+        val result = orderService.getOrderByIdForUser("test@test.com", 100L)
+
+        assertEquals(100L, result.id)
+        assertEquals(1L, result.userId)
+        assertEquals(1, result.items.size)
+    }
+
+    @Test
+    fun `get order by id for user throws forbidden when order does not belong to user`() {
+        val user = User(
+            id = 1,
+            email = "test@test.com",
+            password = "encoded-password"
+        )
+
+        whenever(userRepo.findByEmail("test@test.com")).thenReturn(Optional.of(user))
+        whenever(orderRepo.findByIdAndUserId(100L, 1L)).thenReturn(Optional.empty())
+
+        val exception = assertThrows<ForbiddenException> {
+            orderService.getOrderByIdForUser("test@test.com", 100L)
+        }
+
+        assertEquals("Access denied to order 100", exception.message)
+    }
 
     @Test
     fun `getOrderById returns correct OrderResponseDTO`() {

@@ -23,7 +23,6 @@ import org.junit.jupiter.api.assertNotNull
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.security.crypto.password.PasswordEncoder
-import org.springframework.test.context.ActiveProfiles
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import kotlin.test.assertEquals
@@ -132,6 +131,13 @@ class OrderCheckoutIntegrationTest : AbstractPostgresIntegrationTest() {
 
         val updatedProduct = productRepository.findById(product.id).orElseThrow()
         assertEquals(3, updatedProduct.stockQuantity)
+
+        val checkoutRequests = checkoutRequestRepository.findAll()
+        assertEquals(1, checkoutRequests.size)
+        assertEquals(
+            io.github.jacob_kelley22.eStore.entity.CheckoutRequestStatus.COMPLETED,
+            checkoutRequests.first().status
+        )
     }
 
     @Test
@@ -153,6 +159,8 @@ class OrderCheckoutIntegrationTest : AbstractPostgresIntegrationTest() {
         }
 
         assertEquals("Cannot check out with an empty cart", exception.message)
+        assertTrue(orderRepository.findAll().isEmpty())
+        assertTrue(paymentRepository.findAll().isEmpty())
     }
 
     @Test
@@ -174,6 +182,14 @@ class OrderCheckoutIntegrationTest : AbstractPostgresIntegrationTest() {
         }
 
         assertTrue(exception.message!!.contains("Insufficient stock"))
+        assertTrue(orderRepository.findAll().isEmpty())
+        assertTrue(paymentRepository.findAll().isEmpty())
+
+        val updatedCart = cartRepository.findByUserId(user.id).orElseThrow()
+        assertEquals(1, updatedCart.items.size)
+
+        val updatedProduct = productRepository.findById(product.id).orElseThrow()
+        assertEquals(1, updatedProduct.stockQuantity)
     }
 
     @Test
@@ -195,6 +211,62 @@ class OrderCheckoutIntegrationTest : AbstractPostgresIntegrationTest() {
         assertEquals(1, orderRepository.findAll().size)
         assertEquals(1, paymentRepository.findAll().size)
         assertEquals(1, checkoutRequestRepository.findAll().size)
+    }
+
+    @Test
+    fun `checkout fails for invalid card and preserves cart and stock`() {
+        val request = PaymentRequestDTO(
+            idempotencyKey = "invalid-card-key",
+            cardNumber = "1234 5678 9012 3456", // invalid Luhn
+            cardHolderName = "Card Holder",
+            expirationMonth = 12,
+            expirationYear = 2030,
+            cvv = "123"
+        )
+
+        assertThrows(BadRequestException::class.java) {
+            orderService.checkout(user, request)
+        }
+
+        // Cart should NOT be cleared
+        val updatedCart = cartRepository.findByUserId(user.id).orElseThrow()
+        assertEquals(1, updatedCart.items.size)
+
+        // Stock should NOT be decremented
+        val updatedProduct = productRepository.findById(product.id).orElseThrow()
+        assertEquals(5, updatedProduct.stockQuantity)
+
+        // Optional: check payment status if you persist failures
+        val payments = paymentRepository.findAll()
+        if (payments.isNotEmpty()) {
+            assertEquals(PaymentStatus.FAILED, payments.first().status)
+        }
+    }
+
+    @Test
+    fun `checkout fails when idempotency key is already pending`() {
+        val request = PaymentRequestDTO(
+            idempotencyKey = "pending-key",
+            cardNumber = "4111 1111 1111 1111",
+            cardHolderName = "Card Holder",
+            expirationMonth = 12,
+            expirationYear = 2030,
+            cvv = "123"
+        )
+
+        // First call should succeed
+        orderService.checkout(user, request)
+
+        // Manually set request back to PENDING to simulate race condition
+        val checkoutRequest = checkoutRequestRepository.findAll().first()
+        checkoutRequest.status = io.github.jacob_kelley22.eStore.entity.CheckoutRequestStatus.PENDING
+        checkoutRequestRepository.save(checkoutRequest)
+
+        val exception = assertThrows(BadRequestException::class.java) {
+            orderService.checkout(user, request)
+        }
+
+        assertTrue(exception.message!!.contains("already being processed"))
     }
 
 }

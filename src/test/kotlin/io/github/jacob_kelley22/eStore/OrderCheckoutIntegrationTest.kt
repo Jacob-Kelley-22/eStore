@@ -3,6 +3,7 @@ package io.github.jacob_kelley22.eStore
 import io.github.jacob_kelley22.eStore.dto.payment.PaymentRequestDTO
 import io.github.jacob_kelley22.eStore.entity.Cart
 import io.github.jacob_kelley22.eStore.entity.CartItem
+import io.github.jacob_kelley22.eStore.entity.CheckoutRequestStatus
 import io.github.jacob_kelley22.eStore.entity.OrderStatus
 import io.github.jacob_kelley22.eStore.entity.PaymentStatus
 import io.github.jacob_kelley22.eStore.entity.Product
@@ -224,23 +225,36 @@ class OrderCheckoutIntegrationTest : AbstractPostgresIntegrationTest() {
             cvv = "123"
         )
 
-        assertThrows(BadRequestException::class.java) {
+        // Check out with bad card
+        val exception = assertThrows(BadRequestException::class.java) {
             orderService.checkout(user, request)
         }
 
-        // Cart should NOT be cleared
+        // Check exception
+        assertEquals("Invalid card number", exception.message)
+
+        // Check failed order
+        val orders = orderRepository.findAll()
+        assertEquals(1, orders.size)
+        assertEquals(OrderStatus.PAYMENT_FAILED, orders.first().status)
+        assertEquals(BigDecimal("2400.00"), orders.first().totalPrice)
+
+        // Check that cart is intact
         val updatedCart = cartRepository.findByUserId(user.id).orElseThrow()
         assertEquals(1, updatedCart.items.size)
+        assertEquals(2, updatedCart.items.first().quantity)
 
         // Stock should NOT be decremented
         val updatedProduct = productRepository.findById(product.id).orElseThrow()
         assertEquals(5, updatedProduct.stockQuantity)
 
-        // Optional: check payment status if you persist failures
-        val payments = paymentRepository.findAll()
-        if (payments.isNotEmpty()) {
-            assertEquals(PaymentStatus.FAILED, payments.first().status)
-        }
+        // Check failed checkout request
+        val checkoutRequests = checkoutRequestRepository.findAll()
+        assertEquals(1, checkoutRequests.size)
+        assertEquals(
+            CheckoutRequestStatus.FAILED,
+            checkoutRequests.first().status)
+
     }
 
     @Test
@@ -259,7 +273,7 @@ class OrderCheckoutIntegrationTest : AbstractPostgresIntegrationTest() {
 
         // Manually set request back to PENDING to simulate race condition
         val checkoutRequest = checkoutRequestRepository.findAll().first()
-        checkoutRequest.status = io.github.jacob_kelley22.eStore.entity.CheckoutRequestStatus.PENDING
+        checkoutRequest.status = CheckoutRequestStatus.PENDING
         checkoutRequestRepository.save(checkoutRequest)
 
         val exception = assertThrows(BadRequestException::class.java) {
@@ -267,6 +281,101 @@ class OrderCheckoutIntegrationTest : AbstractPostgresIntegrationTest() {
         }
 
         assertTrue(exception.message!!.contains("already being processed"))
+    }
+
+    @Test
+    fun `checkout fails for expired card and preserves cart and stock`() {
+        val request = PaymentRequestDTO(
+            idempotencyKey = "test-key",
+            cardNumber = "4111 1111 1111 1111",
+            cardHolderName = "Card Holder",
+            expirationMonth = 1,
+            expirationYear = 2020,
+            cvv = "123"
+        )
+
+        // Submit request with expired card
+        val exception = assertThrows(BadRequestException::class.java) {
+            orderService.checkout(user, request)
+        }
+
+        // Validate exception message
+        assertEquals("Card is expired", exception.message)
+
+        // Check that order was created and payment failed
+        val orders = orderRepository.findAll()
+        assertEquals(1, orders.size)
+        assertEquals(OrderStatus.PAYMENT_FAILED, orders.first().status)
+        assertEquals(BigDecimal("2400.00"), orders.first().totalPrice)
+
+        // Check that cart is intact
+        val updatedCart = cartRepository.findByUserId(user.id).orElseThrow()
+        assertEquals(1, updatedCart.items.size)
+        assertEquals(2, updatedCart.items.first().quantity)
+
+        // Stock should not be decremented
+        val updatedProduct = productRepository.findById(product.id).orElseThrow()
+        assertEquals(5, updatedProduct.stockQuantity)
+
+        // Check that failed payment is recorded
+        val payments = paymentRepository.findAll()
+        assertEquals(1, payments.size)
+        assertEquals(PaymentStatus.FAILED, payments.first().status)
+        assertEquals("Card is expired", payments.first().failureReason)
+
+        // Check that CheckoutRequest is marked failed
+        val checkoutRequests = checkoutRequestRepository.findAll()
+        assertEquals(1, checkoutRequests.size)
+        assertEquals(
+            CheckoutRequestStatus.FAILED,
+            checkoutRequests.first().status
+        )
+
+    }
+
+    @Test
+    fun `failed checkout with same idempotency key can be retried successfully`() {
+        val failedRequest = PaymentRequestDTO(
+            idempotencyKey = "retry-key",
+            cardNumber = "4111 1111 1111 1111",
+            cardHolderName = "Card Holder",
+            expirationMonth = 1,
+            expirationYear = 2020,
+            cvv = "123"
+        )
+
+        assertThrows(BadRequestException::class.java) {
+            orderService.checkout(user, failedRequest)
+        }
+
+        val failedOrder = orderRepository.findAll().first()
+        assertEquals(OrderStatus.PAYMENT_FAILED, failedOrder.status)
+
+        val retryRequest = PaymentRequestDTO(
+            idempotencyKey = "retry-key",
+            cardNumber = "4111 1111 1111 1111",
+            cardHolderName = "Card Holder",
+            expirationMonth = 12,
+            expirationYear = 2030,
+            cvv = "123"
+        )
+
+        val result = orderService.checkout(user, retryRequest)
+
+        assertEquals(failedOrder.id, result.id)
+        assertEquals(OrderStatus.PAID, result.status)
+
+        val allOrder = orderRepository.findAll()
+        assertEquals(1, allOrder.size)
+        assertEquals(OrderStatus.PAID, allOrder.first().status)
+
+        val payments = paymentRepository.findAll()
+        assertEquals(2, payments.size)
+        assertTrue(payments.any { it.status == PaymentStatus.FAILED })
+        assertTrue(payments.any { it.status == PaymentStatus.SUCCEEDED })
+
+        val updatedCart = cartRepository.findByUserId(user.id).orElseThrow()
+        assertTrue(updatedCart.items.isEmpty())
     }
 
 }

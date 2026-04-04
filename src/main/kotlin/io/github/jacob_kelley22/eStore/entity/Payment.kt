@@ -25,7 +25,7 @@ data class Payment (
     val publicId: UUID = UUID.randomUUID(),
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id", nullable = false, unique = true, updatable = false)
+    @JoinColumn(name = "order_id", nullable = false)
     val order: Order,
 
     @Enumerated(EnumType.STRING)

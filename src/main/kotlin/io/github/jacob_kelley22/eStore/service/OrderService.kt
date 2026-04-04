@@ -3,6 +3,7 @@ package io.github.jacob_kelley22.eStore.service
 // DTO
 import io.github.jacob_kelley22.eStore.dto.order.OrderResponseDTO
 import io.github.jacob_kelley22.eStore.dto.payment.PaymentRequestDTO
+import io.github.jacob_kelley22.eStore.entity.Cart
 
 // Entity
 import io.github.jacob_kelley22.eStore.entity.Order
@@ -38,6 +39,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
+import java.time.LocalDateTime
 
 @Service
 class OrderService(
@@ -103,6 +105,33 @@ class OrderService(
                     paymentRequest.idempotencyKey
                     )
                 throw BadRequestException("Checkout is already being processed for this idempotency key")
+            }
+
+            if (checkoutRequest.status == CheckoutRequestStatus.FAILED && checkoutRequest.order != null) {
+                logger.info(
+                    "Retrying failed checkout for user {} and idempotency key {} using existing order {}",
+                    user.email,
+                    paymentRequest.idempotencyKey,
+                    checkoutRequest.order!!.id
+                )
+
+                return retryFailedCheckout(
+                    user = user,
+                    cart = cartRepository.findByUserId(userId).orElseThrow {
+                        ResourceNotFoundException("Cart with id $userId not found")
+                    },
+                    checkoutRequest = checkoutRequest,
+                    paymentRequest = paymentRequest
+                )
+            }
+
+            if (checkoutRequest.status == CheckoutRequestStatus.FAILED) {
+                logger.warn(
+                    "Failed checkout request exists for user {} and idempotency key {} but no order is attached",
+                    user.email,
+                    paymentRequest.idempotencyKey
+                )
+                throw BadRequestException("Checkout request is in a failed state and cannot be resumed")
             }
 
         }
@@ -177,79 +206,199 @@ class OrderService(
                 throw BadRequestException("Checkout is already being processed for this idempotency key")
             }
 
+            if (existing.status == CheckoutRequestStatus.FAILED && existing.order != null) {
+                logger.info(
+                    "Retrying failed checkout after duplicate insert for user {} and idempotency key {}",
+                    user.email,
+                    paymentRequest.idempotencyKey
+                )
+
+                return retryFailedCheckout(
+                    user = user,
+                    cart = cartRepository.findByUserId(user.id).orElseThrow {
+                        ResourceNotFoundException("Cart with id $userId not found")
+                    },
+                    checkoutRequest = existing,
+                    paymentRequest = paymentRequest
+                )
+            }
+
             throw BadRequestException("Checkout request already exists for this idempotency key")
         }
 
-        // Dummy order used to build final order later
-        val order = Order(
-            user = user,
-            items = mutableListOf(),
-            status = OrderStatus.PENDING_PAYMENT,
-            totalPrice = BigDecimal.ZERO
-        )
+        var savedOrder: Order? = null
 
-        // Running total for final order total
-        var totalPrice = BigDecimal.ZERO
-
-        // Convert cart items into order items
-        cart.items.forEach { cartItem ->
-            val product = cartItem.product
-
-            val orderItem = OrderItem(
-                order = order,
-                product = product,
-                quantity = cartItem.quantity,
-                priceAtPurchase = product.price
+        try {
+            // Dummy order used to build final order later
+            val order = Order(
+                user = user,
+                items = mutableListOf(),
+                status = OrderStatus.PENDING_PAYMENT,
+                totalPrice = BigDecimal.ZERO
             )
 
-            // Add converted order item to dummy order
-            order.items.add(orderItem)
+            // Running total for final order total
+            var totalPrice = BigDecimal.ZERO
 
-            // Get the line amount of the cart item (price * quantity) and add it to the total
-            val lineTotal = product.price.multiply(BigDecimal(cartItem.quantity))
-            totalPrice = totalPrice.add(lineTotal)
+            // Convert cart items into order items
+            cart.items.forEach { cartItem ->
+                val product = cartItem.product
 
+                val orderItem = OrderItem(
+                    order = order,
+                    product = product,
+                    quantity = cartItem.quantity,
+                    priceAtPurchase = product.price
+                )
+
+                // Add converted order item to dummy order
+                order.items.add(orderItem)
+
+                // Get the line amount of the cart item (price * quantity) and add it to the total
+                val lineTotal = product.price.multiply(BigDecimal(cartItem.quantity))
+                totalPrice = totalPrice.add(lineTotal)
+
+            }
+
+            val finalOrder = Order(
+                id = order.id,
+                user = order.user,
+                items = order.items,
+                status = order.status,
+                totalPrice = totalPrice
+            )
+
+            // Swap order items to point to finalOrder
+            finalOrder.items.forEach { it.order = finalOrder }
+
+            // Save the order to the db
+            savedOrder = orderRepository.save(finalOrder)
+            logger.info("Order {} has been placed. Processing payment.", savedOrder.id)
+
+            // Process the payment
+            // TO-DO: Change payment status to failed if it fails when transaction rollback is fixed
+            paymentService.processPayment(savedOrder, paymentRequest)
+
+            savedOrder.status = OrderStatus.PAID
+            orderRepository.save(savedOrder) // Intentional save in case of JPA flush
+
+            checkoutRequest.status = CheckoutRequestStatus.COMPLETED
+            checkoutRequest.order = savedOrder
+            checkoutRequest.completedAt = LocalDateTime.now()
+            checkoutRequest.failureReason = null
+            checkoutRequestRepository.save(checkoutRequest)
+
+            // Decrement stock of purchased items
+            cart.items.forEach { cartItem ->
+                val product = cartItem.product
+                product.stockQuantity -= cartItem.quantity
+                productRepository.save(product)
+            }
+
+            // Clear cart after the order is saved, payment is processed, and stock is adjusted
+            cart.items.clear()
+            cartRepository.save(cart)
+
+            logger.info(
+                "Checkout completed for user {}. Order {} has been placed successfully",
+                user.email,
+                savedOrder.id
+            )
+
+            return savedOrder.toDTO()
+        } catch (ex: Exception) {
+            logger.warn(
+                "Checkout failed for user {} and idempotency key {}: {}",
+                user.email,
+                paymentRequest.idempotencyKey,
+                ex.message
+            )
+
+            savedOrder?.let {
+                it.status = OrderStatus.PAYMENT_FAILED
+                orderRepository.save(it)
+            }
+
+            checkoutRequest.status = CheckoutRequestStatus.FAILED
+            checkoutRequest.failureReason = ex.message
+            checkoutRequest.completedAt = LocalDateTime.now()
+            if (savedOrder != null) {
+                checkoutRequest.order = savedOrder
+            }
+            checkoutRequestRepository.save(checkoutRequest)
+
+            throw ex
+        }
+    }
+
+    private fun retryFailedCheckout(
+        user: User,
+        cart: Cart,
+        checkoutRequest: CheckoutRequest,
+        paymentRequest: PaymentRequestDTO
+    ): OrderResponseDTO {
+        val existingOrder = checkoutRequest.order
+            ?: throw BadRequestException("Failed checkout has no associated order to retry")
+
+        if (cart.items.isEmpty()) {
+            throw BadRequestException("Cannot check out with an empty cart")
         }
 
-        val finalOrder = Order(
-            id = order.id,
-            user = order.user,
-            items = order.items,
-            status = order.status,
-            totalPrice = totalPrice
-        )
-
-        // Swap order items to point to finalOrder
-        finalOrder.items.forEach { it.order = finalOrder }
-
-        // Save the order to the db
-        val savedOrder = orderRepository.save(finalOrder)
-        logger.info("Order {} has been placed. Processing payment.", savedOrder.id)
-
-        // Process the payment
-        // TO-DO: Change payment status to failed if it fails when transaction rollback is fixed
-        paymentService.processPayment(savedOrder, paymentRequest)
-
-        savedOrder.status = OrderStatus.PAID // JPA will detect change
-
-        checkoutRequest.status = CheckoutRequestStatus.COMPLETED
-        checkoutRequest.order = savedOrder
-        checkoutRequest.completedAt = java.time.LocalDateTime.now()
-
-        // Decrement stock of purchased items
         cart.items.forEach { cartItem ->
             val product = cartItem.product
-            product.stockQuantity -= cartItem.quantity
-            productRepository.save(product)
+            if (cartItem.quantity > product.stockQuantity) {
+                throw BadRequestException(
+                    "Insufficient stock for product ${product.name}: " +
+                            "requested ${cartItem.quantity}, available ${product.stockQuantity}"
+                )
+            }
         }
 
-        // Clear cart after the order is saved, payment is processed, and stock is adjusted
-        cart.items.clear()
-        cartRepository.save(cart)
+        logger.info(
+            "Retrying payment for failed order {} for user {}",
+            existingOrder.id,
+            user.email
+        )
 
-        logger.info("Checkout completed for user {}. Order {} has been placed successfully", user.email, savedOrder.id)
+        checkoutRequest.status = CheckoutRequestStatus.PENDING
+        checkoutRequest.failureReason = null
+        checkoutRequest.completedAt = null
+        checkoutRequestRepository.save(checkoutRequest)
 
-        return savedOrder.toDTO()
+        try {
+            paymentService.processPayment(existingOrder, paymentRequest)
+
+            existingOrder.status = OrderStatus.PAID
+            orderRepository.save(existingOrder)
+
+            checkoutRequest.status = CheckoutRequestStatus.COMPLETED
+            checkoutRequest.order = existingOrder
+            checkoutRequest.completedAt = LocalDateTime.now()
+            checkoutRequest.failureReason = null
+            checkoutRequestRepository.save(checkoutRequest)
+
+            cart.items.forEach { cartItem ->
+                val product = cartItem.product
+                product.stockQuantity -= cartItem.quantity
+                productRepository.save(product)
+            }
+
+            cart.items.clear()
+            cartRepository.save(cart)
+
+            return existingOrder.toDTO()
+        } catch (ex: Exception) {
+            existingOrder.status = OrderStatus.PAYMENT_FAILED
+            orderRepository.save(existingOrder)
+
+            checkoutRequest.status = CheckoutRequestStatus.FAILED
+            checkoutRequest.order = existingOrder
+            checkoutRequest.failureReason = ex.message
+            checkoutRequest.completedAt = LocalDateTime.now()
+            checkoutRequestRepository.save(checkoutRequest)
+
+            throw ex
+        }
     }
 
     @Transactional
@@ -283,7 +432,7 @@ class OrderService(
         val sort = if (sortDirection.equals("desc", ignoreCase = true)) {
             Sort.by(sortBy).descending()
         } else {
-            Sort.by(sortDirection).ascending()
+            Sort.by(sortBy).ascending()
         }
 
         val pageable = PageRequest.of(page, size, sort)

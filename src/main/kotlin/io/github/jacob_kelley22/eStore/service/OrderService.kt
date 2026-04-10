@@ -276,7 +276,6 @@ class OrderService(
             logger.info("Order {} has been placed. Processing payment.", savedOrder.id)
 
             // Process the payment
-            // TO-DO: Change payment status to failed if it fails when transaction rollback is fixed
             paymentService.processPayment(savedOrder, paymentRequest)
 
             savedOrder.status = OrderStatus.PAID

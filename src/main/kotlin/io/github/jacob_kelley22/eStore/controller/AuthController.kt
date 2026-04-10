@@ -26,6 +26,7 @@ class AuthController(
     fun registerUser(
         @RequestBody @Valid request: UserRegistrationRequestDTO
     ): ResponseEntity<LoginResponseDTO> {
+        // Register user
         val response: LoginResponseDTO = authService.register(request)
         return ResponseEntity.ok(response)
     }

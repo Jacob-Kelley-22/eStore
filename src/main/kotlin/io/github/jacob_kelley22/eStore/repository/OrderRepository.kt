@@ -9,8 +9,6 @@ import java.util.Optional
 
 @Repository
 interface OrderRepository : JpaRepository<Order, Long>{
-    fun findByUserId(userId: Long) : List<Order>
-
     fun findByUserId(userId: Long, pageable: Pageable): Page<Order>
 
     fun findByIdAndUserId(orderId: Long, userId: Long): Optional<Order>

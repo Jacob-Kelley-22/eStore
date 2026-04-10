@@ -18,7 +18,7 @@ class UserService(
 
     fun registerUser(request: UserRegistrationRequestDTO): UserResponseDTO {
         // Check if email is in use
-        if (userRepository.findByEmail(request.email) != null) {
+        if (userRepository.findByEmail(request.email).isPresent) {
             throw RuntimeException("User email ${request.email} already exists")
         }
 

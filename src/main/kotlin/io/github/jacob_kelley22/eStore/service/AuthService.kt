@@ -29,7 +29,7 @@ class AuthService(
 
         logger.info("Registering user: ${request.email}")
 
-        if (userRepository.findByEmail(request.email) != null) {
+        if (userRepository.findByEmail(request.email).isPresent) {
             logger.warn("User with email ${request.email} already exists")
             throw RuntimeException("Registration failed " +
                     "because user email ${request.email} already exists")

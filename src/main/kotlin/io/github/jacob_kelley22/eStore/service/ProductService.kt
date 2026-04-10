@@ -54,11 +54,7 @@ class ProductService(
         var spec: Specification<Product>? = null
 
         if (!name.isNullOrBlank()) {
-            spec = if (spec == null) {
-                ProductSpecifications.nameContains(name)
-            } else {
-                spec.and(ProductSpecifications.nameContains(name))
-            }
+            spec = ProductSpecifications.nameContains(name)
         }
 
         if (minPrice != null) {

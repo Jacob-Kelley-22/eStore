@@ -11,10 +11,13 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.util.*
 import org.mockito.kotlin.*
+import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.data.domain.PageImpl
+import org.springframework.test.context.ActiveProfiles
 import java.math.BigDecimal
 
-
+@ActiveProfiles("test")
+@SpringBootTest
 class OrderServiceTest {
     private val orderRepo: OrderRepository = mock()
     private val userRepo: UserRepository = mock()

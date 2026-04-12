@@ -6,9 +6,13 @@ import io.github.jacob_kelley22.eStore.service.UserService
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.*
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.test.context.ActiveProfiles
 import java.util.*
 import kotlin.test.assertEquals
 
+@ActiveProfiles("test")
+@SpringBootTest
 class UserServiceTest {
 
     private val userRepo : UserRepository = mock()

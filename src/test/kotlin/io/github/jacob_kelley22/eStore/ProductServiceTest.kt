@@ -8,11 +8,15 @@ import io.github.jacob_kelley22.eStore.service.ProductService
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.*
+import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.jpa.domain.Specification
+import org.springframework.test.context.ActiveProfiles
 import java.math.BigDecimal
 import java.util.Optional
 
+@ActiveProfiles("test")
+@SpringBootTest
 class ProductServiceTest {
 
     private val productRepository: ProductRepository = mock()

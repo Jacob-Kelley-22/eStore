@@ -1,4 +1,5 @@
 # eCommerce Store Backend
+![CI](https://github.com/Jacob-Kelley-22/eStore/actions/workflows/ci.yml/badge.svg)
 
 This is an eCommerce backend built with Kotlin and Spring Boot.
 

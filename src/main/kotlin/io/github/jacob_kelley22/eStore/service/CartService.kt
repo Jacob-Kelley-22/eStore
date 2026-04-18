@@ -144,9 +144,9 @@ class CartService(
         val cart = cartRepository.findByUserId(user.id)
             .orElseGet {
                 cartRepository.save(Cart(user = user))
-            }
+            }.toDTO()
 
-        return cart.toDTO()
+        return cart
     }
 
     @Transactional

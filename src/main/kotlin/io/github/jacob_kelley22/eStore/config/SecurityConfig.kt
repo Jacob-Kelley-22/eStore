@@ -13,12 +13,15 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
+import org.springframework.web.cors.CorsConfiguration
+import org.springframework.web.cors.CorsConfigurationSource
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 
 @Configuration
 @EnableMethodSecurity
-class SecurityConfig (
+class SecurityConfig(
     private val correlationIdFilter: CorrelationIdFilter,
-){
+) {
 
     @Bean
     fun passwordEncoder(): PasswordEncoder {
@@ -26,11 +29,40 @@ class SecurityConfig (
     }
 
     @Bean
+    fun corsConfigurationSource(): CorsConfigurationSource {
+        val configuration = CorsConfiguration()
+        configuration.allowedOrigins = listOf("http://localhost:5173")
+        configuration.allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+        configuration.allowedHeaders = listOf("*")
+        configuration.allowCredentials = true
+
+        val source = UrlBasedCorsConfigurationSource()
+        source.registerCorsConfiguration("/**", configuration)
+        return source
+    }
+
+    @Bean
+    @Order(1)
+    fun actuatorHealthFilterChain(http: HttpSecurity): SecurityFilterChain {
+        http
+            .securityMatcher(EndpointRequest.to("health", "info"))
+            .cors { }
+            .csrf { it.disable() }
+            .authorizeHttpRequests { auth ->
+                auth.anyRequest().permitAll()
+            }
+
+        return http.build()
+    }
+
+    @Bean
+    @Order(2)
     fun filterChain(
         http: HttpSecurity,
-        jwtAuthenticationFilter: JwtAuthenticationFilter, correlationIdFilter: CorrelationIdFilter
+        jwtAuthenticationFilter: JwtAuthenticationFilter,
     ): SecurityFilterChain {
         http
+            .cors { }
             .csrf { it.disable() }
             .authorizeHttpRequests { auth ->
                 auth
@@ -40,8 +72,10 @@ class SecurityConfig (
                         "/swagger-ui/**",
                         "/swagger-ui.html",
                         "/actuator/health",
-                        "/actuator/info"
-                        ).permitAll()
+                        "/actuator/info",
+                        "/api/products",
+                        "/api/products/**"
+                    ).permitAll()
                     .anyRequest().authenticated()
             }
             .addFilterBefore(correlationIdFilter, UsernamePasswordAuthenticationFilter::class.java)
@@ -58,18 +92,5 @@ class SecurityConfig (
         authConfig: AuthenticationConfiguration
     ): AuthenticationManager {
         return authConfig.authenticationManager
-    }
-
-    @Bean
-    @Order(1)
-    fun actuatorHealthFilterChain(http: HttpSecurity): SecurityFilterChain {
-        http
-            .securityMatcher(EndpointRequest.to("health"))
-            .csrf { it.disable() }
-            .authorizeHttpRequests { auth ->
-                auth.anyRequest().permitAll()
-            }
-
-        return http.build()
     }
 }

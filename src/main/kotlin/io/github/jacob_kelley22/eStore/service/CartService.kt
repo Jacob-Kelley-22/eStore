@@ -15,6 +15,7 @@ import io.github.jacob_kelley22.eStore.repository.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import jakarta.transaction.Transactional
+import java.math.BigDecimal
 
 @Service
 class CartService(
@@ -142,11 +143,14 @@ class CartService(
             }
 
         val cart = cartRepository.findByUserId(user.id)
-            .orElseGet {
-                cartRepository.save(Cart(user = user))
-            }.toDTO()
 
-        return cart
+        if (cart.isPresent) return cart.get().toDTO()
+
+        return CartResponseDTO(
+            userId = user.id,
+            items = emptyList(),
+            totalPrice = BigDecimal.ZERO
+        )
     }
 
     @Transactional

@@ -117,3 +117,86 @@ input {
   color: white;
   margin-left: auto;
 }
+
+select {
+  padding: 0.75rem;
+  font-size: 1rem;
+}
+
+.checkout-actions {
+  margin-top: 1rem;
+}
+
+.button-link {
+  display: inline-block;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: #111;
+  color: white;
+  text-decoration: none;
+}
+
+.orders-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.order-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.order-total {
+  font-size: 1.1rem;
+}
+
+.order-items {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.order-item-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #ddd;
+}
+
+.order-item-pricing {
+  text-align: right;
+}
+
+.empty-state {
+  text-align: center;
+}
+
+.admin-page {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.admin-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 1.5rem;
+}
+
+textarea {
+  padding: 0.75rem;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}

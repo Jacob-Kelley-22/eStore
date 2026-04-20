@@ -5,8 +5,11 @@ import LoginPage from '../pages/LoginPage'
 import RegisterPage from '../pages/RegisterPage'
 import CheckoutPage from '../pages/CheckoutPage'
 import OrdersPage from '../pages/OrdersPage'
+import AdminProductsPage from '../pages/AdminProductsPage'
 import App from '../App'
 import ProtectedRoute from '../components/ProtectedRoute'
+import PublicOnlyRoute from '../components/PublicOnlyRoute'
+import AdminRoute from '../components/AdminRoute'
 
 const router = createBrowserRouter([
   {
@@ -15,8 +18,22 @@ const router = createBrowserRouter([
     children: [
       { path: '/', element: <ProductsPage /> },
       { path: '/products', element: <ProductsPage /> },
-      { path: '/login', element: <LoginPage /> },
-      { path: '/register', element: <RegisterPage /> },
+      {
+        path: '/login',
+        element: (
+          <PublicOnlyRoute>
+            <LoginPage />
+          </PublicOnlyRoute>
+        ),
+      },
+      {
+        path: '/register',
+        element: (
+          <PublicOnlyRoute>
+            <RegisterPage />
+          </PublicOnlyRoute>
+        ),
+      },
       {
         path: '/cart',
         element: (
@@ -39,6 +56,14 @@ const router = createBrowserRouter([
           <ProtectedRoute>
             <OrdersPage />
           </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/admin/products',
+        element: (
+          <AdminRoute>
+            <AdminProductsPage />
+          </AdminRoute>
         ),
       },
     ],

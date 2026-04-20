@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getCart, removeCartItem } from '../api/cart'
 
 export default function CartPage() {
@@ -47,16 +48,25 @@ export default function CartPage() {
 
   const items = cart?.items ?? []
   const total = Number(cart?.totalPrice ?? 0)
+  const isEmpty = items.length === 0
 
   return (
     <div>
       <h1>Cart</h1>
 
-      {loading && <p>Loading...</p>}
+      {loading && <p>Loading cart...</p>}
       {message && <p className="success-text">{message}</p>}
       {error && <p className="error-text">{error}</p>}
 
-      {!loading && items.length === 0 && <p>Your cart is empty.</p>}
+      {!loading && isEmpty && !error && (
+        <div className="card empty-state">
+          <h2>Your cart is empty</h2>
+          <p>Add a product to get started.</p>
+          <Link to="/products" className="button-link">
+            Browse Products
+          </Link>
+        </div>
+      )}
 
       {items.length > 0 && (
         <>
@@ -80,6 +90,12 @@ export default function CartPage() {
           </div>
 
           <h2>Total: ${total.toFixed(2)}</h2>
+
+          <div className="checkout-actions">
+            <Link to="/checkout" className="button-link">
+              Proceed to Checkout
+            </Link>
+          </div>
         </>
       )}
     </div>

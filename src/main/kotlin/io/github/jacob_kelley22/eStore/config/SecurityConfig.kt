@@ -33,7 +33,8 @@ class SecurityConfig(
         val configuration = CorsConfiguration()
         configuration.allowedOrigins = listOf(
             "http://localhost:5173",
-            "http://localhost:3000"
+            "http://localhost:3000",
+            "https://app.jacobwebstore.com"
             )
         configuration.allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
         configuration.allowedHeaders = listOf("*")

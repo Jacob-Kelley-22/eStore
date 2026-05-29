@@ -3,7 +3,6 @@ package io.github.jacob_kelley22.eStore.security
 import io.github.jacob_kelley22.eStore.service.CustomUserDetailsService
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.context.SecurityContextHolder
-import org.springframework.security.core.userdetails.UserDetailsService
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource
 import org.springframework.web.filter.OncePerRequestFilter
 import jakarta.servlet.FilterChain
@@ -19,12 +18,17 @@ class JwtAuthenticationFilter(
 
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
         val path = request.servletPath
+        val method = request.method
+
+        val isPublicProductRead =
+            method == "GET" && path.startsWith("/api/products")
 
         return path.startsWith("/api/auth") ||
+                isPublicProductRead ||
                 path.startsWith("/v3/api-docs") ||
                 path.startsWith("/swagger-ui") ||
                 path == "/swagger-ui.html" ||
-                path == "/actuator/health"
+                path == "/actuator"
     }
 
     override fun doFilterInternal(
@@ -45,9 +49,16 @@ class JwtAuthenticationFilter(
 
         if(SecurityContextHolder.getContext().authentication == null) {
 
-            val userDetails = userDetailsService.loadUserByUsername(username)
+            println("Auth header present")
+            println("JWT username: $username")
 
-            if(jwtUtil.validateToken(jwt, userDetails)) {
+            val userDetails = userDetailsService.loadUserByUsername(username)
+            println("Loaded authorities: ${userDetails.authorities}")
+
+            val valid = jwtUtil.validateToken(jwt, userDetails)
+            println("JWT valid: $valid")
+
+            if(valid) {
 
                 val authToken = UsernamePasswordAuthenticationToken(
                     userDetails,
@@ -58,6 +69,10 @@ class JwtAuthenticationFilter(
                 authToken.details =
                     WebAuthenticationDetailsSource().buildDetails(request)
 
+
+                println("Setting auth: ${authToken.authorities}")
+
+                println("JWT authenticated user=$username authorities=${userDetails.authorities}")
                 SecurityContextHolder.getContext().authentication = authToken
             }
         }

@@ -31,3 +31,7 @@ out/
 uploads/*
 !uploads/.keep
 
+# ========================
+# Deployment Files
+# ========================
+estore-app.tar

@@ -17,7 +17,7 @@ import java.math.BigDecimal
 class ProductController (private val productService: ProductService) {
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     fun createProduct(@RequestBody request: CreateProductRequestDTO): ProductResponseDTO {
         return productService.createProduct(request)
     }
@@ -51,7 +51,7 @@ class ProductController (private val productService: ProductService) {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     fun updateProduct(
         @PathVariable id: Long,
         @RequestBody request : CreateProductRequestDTO
@@ -61,7 +61,7 @@ class ProductController (private val productService: ProductService) {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     fun deleteProduct(@PathVariable id: Long): ResponseEntity<Void> {
         productService.deleteProduct(id)
         return ResponseEntity.noContent().build()

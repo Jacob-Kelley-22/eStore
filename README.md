@@ -242,9 +242,7 @@ The production environment is hosted on AWS using:
 ## Future Improvements
 
 * Refresh token support
-* CI/CD pipeline
 * Expanded integration testing
-* Product image hosting
 * Observability and metrics
 * Payment provider integration
 * Product image upload and storage
